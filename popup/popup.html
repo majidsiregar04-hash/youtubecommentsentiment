@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YouTube Comment Sentiment</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        <h1>YT Sentiment Analyzer</h1>
+        <button id="settingsBtn" class="icon-btn" title="Pengaturan">⚙️</button>
+      </div>
+
+      <!-- Settings Panel -->
+      <div id="settingsPanel" class="settings-panel hidden">
+        <label for="apiKeyInput">Google Gemini API Key:</label>
+        <div class="input-group">
+          <input
+            type="password"
+            id="apiKeyInput"
+            placeholder="Masukkan API Key..."
+          />
+          <button id="saveKeyBtn" class="btn btn-sm">Simpan</button>
+        </div>
+        <p class="hint">
+          Dapatkan API key di
+          <a href="https://aistudio.google.com/apikey" target="_blank"
+            >Google AI Studio</a
+          >
+        </p>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <div class="input-group">
+          <label for="maxComments">Jumlah komentar:</label>
+          <select id="maxComments">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="30" selected>30</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+        <button id="analyzeBtn" class="btn btn-primary">
+          🔍 Analisis Komentar
+        </button>
+      </div>
+
+      <!-- Status -->
+      <div id="status" class="status hidden"></div>
+
+      <!-- Loading -->
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p id="loadingText">Mengambil komentar...</p>
+      </div>
+
+      <!-- Results -->
+      <div id="results" class="results hidden">
+        <!-- Video Info -->
+        <div class="video-info">
+          <h3 id="videoTitle"></h3>
+          <p id="commentCount"></p>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-section">
+          <h3>Distribusi Sentimen</h3>
+          <div class="chart-container">
+            <canvas id="sentimentChart"></canvas>
+          </div>
+          <div class="stat-bars">
+            <div class="stat-bar">
+              <span class="stat-label">😊 Positif</span>
+              <div class="bar-bg">
+                <div id="barPositif" class="bar bar-positif"></div>
+              </div>
+              <span id="countPositif" class="stat-count">0</span>
+            </div>
+            <div class="stat-bar">
+              <span class="stat-label">😐 Netral</span>
+              <div class="bar-bg">
+                <div id="barNetral" class="bar bar-netral"></div>
+              </div>
+              <span id="countNetral" class="stat-count">0</span>
+            </div>
+            <div class="stat-bar">
+              <span class="stat-label">😞 Negatif</span>
+              <div class="bar-bg">
+                <div id="barNegatif" class="bar bar-negatif"></div>
+              </div>
+              <span id="countNegatif" class="stat-count">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="summary-section">
+          <h3>📝 Ringkasan AI</h3>
+          <p id="summaryText"></p>
+        </div>
+
+        <!-- Comment List -->
+        <div class="comments-section">
+          <h3>Detail Komentar</h3>
+          <div id="commentList" class="comment-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="lib/chart.min.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
