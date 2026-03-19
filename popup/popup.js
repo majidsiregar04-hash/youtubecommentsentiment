@@ -70,11 +70,15 @@ document.addEventListener("DOMContentLoaded", () => {
         );
       }
 
-      // Step 2: Scrape comments
+      // Step 2: Scrape comments (maxComments=0 means all)
+      loadingText.textContent =
+        maxComments === 0
+          ? "Memuat semua komentar (scroll otomatis)..."
+          : `Memuat ${maxComments} komentar...`;
+
       const scrapeResult = await sendMessageToTab(tab.id, {
         action: "scrapeComments",
         maxComments: maxComments,
-        scrollAttempts: 5,
       });
 
       if (!scrapeResult?.success || scrapeResult.comments.length === 0) {
