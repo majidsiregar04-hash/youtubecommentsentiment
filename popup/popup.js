@@ -14,6 +14,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let sentimentChart = null;
 
+  // Listen for batch progress updates from background
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === "batchProgress") {
+      loadingText.textContent =
+        `Menganalisis batch ${message.current}/${message.total} (${message.processed}/${message.totalComments} komentar)...`;
+    }
+  });
+
   // Load saved API key
   chrome.runtime.sendMessage({ action: "getApiKey" }, (response) => {
     if (response?.apiKey) {
