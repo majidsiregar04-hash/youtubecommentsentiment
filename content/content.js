@@ -10,7 +10,12 @@
 
     const comments = [];
     commentElements.forEach((el) => {
-      const text = el.innerText.trim();
+      // Clean control characters that break JSON parsing
+      const text = el.innerText
+        .trim()
+        .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       if (text) {
         comments.push(text);
       }

@@ -60,7 +60,10 @@ PENTING: Jawab HANYA dalam format JSON valid berikut, tanpa teks tambahan:
 
   // Extract JSON from response (handle markdown code blocks)
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-  const jsonStr = jsonMatch[1].trim();
+  let jsonStr = jsonMatch[1].trim();
+
+  // Clean control characters inside JSON string values that break JSON.parse
+  jsonStr = jsonStr.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, " ");
 
   return JSON.parse(jsonStr);
 }
