@@ -27,9 +27,8 @@
     return titleEl ? titleEl.innerText.trim() : "Unknown Video";
   }
 
-  function scrollToLoadComments(maxScrolls = 5) {
+  function scrollToLoadComments(maxComments) {
     return new Promise((resolve) => {
-      let scrollCount = 0;
       const commentsSection = document.querySelector("ytd-comments#comments");
 
       if (!commentsSection) {
@@ -37,55 +36,68 @@
         return;
       }
 
-      const interval = setInterval(() => {
-        window.scrollBy(0, 800);
-        scrollCount++;
+      let previousCount = 0;
+      let stableRounds = 0;
+      const maxStableRounds = 3; // Stop after 3 rounds with no new comments
 
-        if (scrollCount >= maxScrolls) {
+      const interval = setInterval(() => {
+        const currentCount = document.querySelectorAll(
+          "ytd-comment-thread-renderer #content-text"
+        ).length;
+
+        // If we have enough comments (when not loading all), stop
+        if (maxComments > 0 && currentCount >= maxComments) {
           clearInterval(interval);
-          // Wait for comments to render
-          setTimeout(() => resolve(true), 2000);
+          setTimeout(() => resolve(true), 1500);
+          return;
         }
-      }, 1000);
+
+        // Check if new comments were loaded
+        if (currentCount === previousCount) {
+          stableRounds++;
+        } else {
+          stableRounds = 0;
+        }
+
+        previousCount = currentCount;
+
+        // If no new comments after several rounds, we've reached the end
+        if (stableRounds >= maxStableRounds) {
+          clearInterval(interval);
+          setTimeout(() => resolve(true), 1500);
+          return;
+        }
+
+        // Scroll down to trigger loading more comments
+        window.scrollBy(0, 1500);
+      }, 1500);
     });
   }
 
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request.action === "scrapeComments") {
-      const maxComments = request.maxComments || 50;
+      // maxComments: 0 means load all
+      const maxComments = request.maxComments || 0;
 
-      // First check if comments are already loaded
-      let comments = extractComments();
+      // Always scroll to load comments
+      scrollToLoadComments(maxComments).then(() => {
+        let comments = extractComments();
+        const finalComments =
+          maxComments > 0 ? comments.slice(0, maxComments) : comments;
 
-      if (comments.length === 0) {
-        // Scroll down to load comments
-        scrollToLoadComments(request.scrollAttempts || 5).then((scrolled) => {
-          if (scrolled) {
-            comments = extractComments();
-          }
-
-          sendResponse({
-            success: comments.length > 0,
-            comments: comments.slice(0, maxComments),
-            videoTitle: getVideoTitle(),
-            totalFound: comments.length,
-            message:
-              comments.length > 0
-                ? `Berhasil mengambil ${Math.min(comments.length, maxComments)} komentar`
-                : "Tidak ada komentar ditemukan. Pastikan Anda berada di halaman video YouTube dan komentar sudah dimuat.",
-          });
+        sendResponse({
+          success: finalComments.length > 0,
+          comments: finalComments,
+          videoTitle: getVideoTitle(),
+          totalFound: comments.length,
+          message:
+            finalComments.length > 0
+              ? `Berhasil mengambil ${finalComments.length} komentar`
+              : "Tidak ada komentar ditemukan. Pastikan Anda berada di halaman video YouTube dan komentar sudah dimuat.",
         });
-        return true; // Keep message channel open for async response
-      }
-
-      sendResponse({
-        success: true,
-        comments: comments.slice(0, maxComments),
-        videoTitle: getVideoTitle(),
-        totalFound: comments.length,
-        message: `Berhasil mengambil ${Math.min(comments.length, maxComments)} komentar`,
       });
+      return true; // Keep message channel open for async response
     }
 
     return true;
