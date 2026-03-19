@@ -334,6 +334,47 @@ body {
   color: #ccc;
 }
 
+.theme-sections {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.theme-item {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #222;
+}
+
+.theme-item.positif { border-left: 3px solid #22c55e; }
+.theme-item.netral { border-left: 3px solid #eab308; }
+.theme-item.negatif { border-left: 3px solid #ef4444; }
+
+.theme-item strong { color: #e1e1e1; }
+.theme-item span { color: #aaa; }
+
+/* Download */
+.download-section {
+  margin-bottom: 12px;
+}
+
+.btn-download {
+  width: 100%;
+  padding: 10px;
+  font-size: 13px;
+  background: #1a3a5a;
+  color: #6bb8ff;
+  border: 1px solid #203a5a;
+  cursor: pointer;
+}
+
+.btn-download:hover {
+  background: #204060;
+}
+
 /* Comments */
 .comments-section {
   background: #1a1a1a;

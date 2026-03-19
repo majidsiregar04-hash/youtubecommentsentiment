@@ -84,6 +84,60 @@ Jawab HANYA dalam JSON valid:
   }
 }
 
+async function generateSummary(allResults, totalStats, apiKey) {
+  // Pick up to 10 sample comments per sentiment for the summary prompt
+  const samples = {};
+  for (const s of ["positif", "netral", "negatif"]) {
+    samples[s] = allResults
+      .filter((r) => r.sentiment === s)
+      .slice(0, 10)
+      .map((r) => r.komentar);
+  }
+
+  const prompt = `Kamu adalah analis sentimen komentar YouTube. Berikut statistik dan sampel komentar dari sebuah video:
+
+Statistik: ${totalStats.positif} positif, ${totalStats.netral} netral, ${totalStats.negatif} negatif.
+
+Sampel komentar positif:
+${samples.positif.map((c) => `- "${c}"`).join("\n") || "(tidak ada)"}
+
+Sampel komentar netral:
+${samples.netral.map((c) => `- "${c}"`).join("\n") || "(tidak ada)"}
+
+Sampel komentar negatif:
+${samples.negatif.map((c) => `- "${c}"`).join("\n") || "(tidak ada)"}
+
+Buat ringkasan dalam format JSON berikut. Ringkasan harus singkat (maks 2-3 kalimat per kategori), menjelaskan TEMA/TOPIK bahasan utama di setiap kategori sentimen, bukan hanya mengulangi angka.
+{
+  "ringkasan": "Ringkasan keseluruhan 1-2 kalimat",
+  "tema_positif": "Apa yang dibahas komentar positif",
+  "tema_netral": "Apa yang dibahas komentar netral",
+  "tema_negatif": "Apa yang dibahas komentar negatif"
+}`;
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  if (!response.ok) throw new Error("Summary API error");
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("No summary response");
+
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+  return JSON.parse(jsonMatch[1].trim());
+}
+
 // Handle messages from popup
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === "analyzeSentiment") {
@@ -127,19 +181,38 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
           totalStats.netral += result.statistik.netral;
         }
 
-        // Generate concise summary from overall stats
-        const total = totalStats.positif + totalStats.negatif + totalStats.netral;
-        const dominan = totalStats.positif >= totalStats.negatif && totalStats.positif >= totalStats.netral
-          ? "positif" : totalStats.negatif >= totalStats.positif && totalStats.negatif >= totalStats.netral
-          ? "negatif" : "netral";
-        const pctDominan = total > 0 ? Math.round((totalStats[dominan] / total) * 100) : 0;
-        const ringkasan = `Dari ${total} komentar yang dianalisis, sentimen didominasi oleh komentar ${dominan} (${pctDominan}%) dengan ${totalStats.positif} positif, ${totalStats.netral} netral, dan ${totalStats.negatif} negatif.`;
+        // Generate thematic summary via Gemini
+        chrome.runtime.sendMessage({
+          action: "batchProgress",
+          current: totalBatches,
+          total: totalBatches,
+          processed: comments.length,
+          totalComments: comments.length,
+          status: "Membuat ringkasan...",
+        }).catch(() => {});
+
+        let summaryData;
+        try {
+          summaryData = await generateSummary(allResults, totalStats, apiKey);
+        } catch {
+          // Fallback to stats-only summary
+          const total = totalStats.positif + totalStats.negatif + totalStats.netral;
+          summaryData = {
+            ringkasan: `Dari ${total} komentar: ${totalStats.positif} positif, ${totalStats.netral} netral, ${totalStats.negatif} negatif.`,
+            tema_positif: "",
+            tema_netral: "",
+            tema_negatif: "",
+          };
+        }
 
         sendResponse({
           success: true,
           data: {
             hasil: allResults,
-            ringkasan: ringkasan,
+            ringkasan: summaryData.ringkasan,
+            tema_positif: summaryData.tema_positif || "",
+            tema_netral: summaryData.tema_netral || "",
+            tema_negatif: summaryData.tema_negatif || "",
             statistik: totalStats,
           },
         });

@@ -13,11 +13,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultsDiv = document.getElementById("results");
 
   let sentimentChart = null;
+  let lastAnalysisData = null;
+  let lastVideoTitle = "";
+  let lastCommentCount = 0;
 
   // Listen for batch progress updates from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === "batchProgress") {
-      loadingText.textContent =
+      loadingText.textContent = message.status ||
         `Menganalisis batch ${message.current}/${message.total} (${message.processed}/${message.totalComments} komentar)...`;
     }
   });
@@ -54,6 +57,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Analyze button
   analyzeBtn.addEventListener("click", startAnalysis);
+
+  // PDF download button
+  document.getElementById("downloadPdfBtn").addEventListener("click", generatePdf);
 
   async function startAnalysis() {
     const maxComments = parseInt(maxCommentsSelect.value);
@@ -167,8 +173,23 @@ document.addEventListener("DOMContentLoaded", () => {
     // Chart
     renderChart(stats);
 
-    // Summary
+    // Summary & themes
     document.getElementById("summaryText").textContent = data.ringkasan;
+
+    const themeSections = document.getElementById("themeSections");
+    if (data.tema_positif || data.tema_netral || data.tema_negatif) {
+      themeSections.classList.remove("hidden");
+      document.getElementById("themePositif").textContent = data.tema_positif || "-";
+      document.getElementById("themeNetral").textContent = data.tema_netral || "-";
+      document.getElementById("themeNegatif").textContent = data.tema_negatif || "-";
+    } else {
+      themeSections.classList.add("hidden");
+    }
+
+    // Store for PDF export
+    lastAnalysisData = data;
+    lastVideoTitle = videoTitle;
+    lastCommentCount = commentCount;
 
     // Comment list grouped by sentiment
     const commentList = document.getElementById("commentList");
@@ -268,5 +289,78 @@ document.addEventListener("DOMContentLoaded", () => {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  function generatePdf() {
+    if (!lastAnalysisData) return;
+
+    const data = lastAnalysisData;
+    const stats = data.statistik;
+    const total = stats.positif + stats.negatif + stats.netral;
+
+    // Group comments
+    const grouped = { positif: [], netral: [], negatif: [] };
+    data.hasil.forEach((item) => {
+      if (grouped[item.sentiment]) grouped[item.sentiment].push(item);
+    });
+
+    // Build HTML for PDF
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>Analisis Sentimen - ${lastVideoTitle}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #222; }
+  h1 { font-size: 18px; color: #c00; border-bottom: 2px solid #c00; padding-bottom: 8px; }
+  h2 { font-size: 15px; margin-top: 20px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 16px; }
+  .stats { display: flex; gap: 20px; margin: 12px 0; }
+  .stat { padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 14px; }
+  .stat.positif { background: #dcfce7; color: #166534; }
+  .stat.netral { background: #fef9c3; color: #854d0e; }
+  .stat.negatif { background: #fee2e2; color: #991b1b; }
+  .summary { background: #f8f9fa; padding: 12px; border-radius: 8px; margin: 12px 0; font-size: 13px; line-height: 1.6; }
+  .theme { margin: 4px 0; }
+  .theme strong { font-size: 13px; }
+  .group-title { font-size: 14px; margin-top: 16px; padding: 6px 0; border-bottom: 1px solid #ddd; }
+  .group-title.positif { color: #166534; }
+  .group-title.netral { color: #854d0e; }
+  .group-title.negatif { color: #991b1b; }
+  .comment { padding: 6px 0; border-bottom: 1px solid #eee; font-size: 12px; }
+  .comment .text { color: #333; }
+  .comment .reason { color: #888; font-style: italic; font-size: 11px; }
+  @media print { body { padding: 10px; } }
+</style>
+</head><body>
+<h1>Analisis Sentimen Komentar YouTube</h1>
+<div class="meta"><strong>${lastVideoTitle}</strong><br>${lastCommentCount} komentar dianalisis</div>
+
+<div class="stats">
+  <div class="stat positif">Positif: ${stats.positif} (${total > 0 ? Math.round(stats.positif / total * 100) : 0}%)</div>
+  <div class="stat netral">Netral: ${stats.netral} (${total > 0 ? Math.round(stats.netral / total * 100) : 0}%)</div>
+  <div class="stat negatif">Negatif: ${stats.negatif} (${total > 0 ? Math.round(stats.negatif / total * 100) : 0}%)</div>
+</div>
+
+<h2>Ringkasan</h2>
+<div class="summary">
+  <p>${data.ringkasan}</p>
+  ${data.tema_positif ? `<div class="theme"><strong>Positif:</strong> ${data.tema_positif}</div>` : ""}
+  ${data.tema_netral ? `<div class="theme"><strong>Netral:</strong> ${data.tema_netral}</div>` : ""}
+  ${data.tema_negatif ? `<div class="theme"><strong>Negatif:</strong> ${data.tema_negatif}</div>` : ""}
+</div>
+
+<h2>Detail Komentar</h2>
+${["positif", "netral", "negatif"].map((s) => {
+  if (grouped[s].length === 0) return "";
+  const label = s === "positif" ? "Positif" : s === "netral" ? "Netral" : "Negatif";
+  return `<div class="group-title ${s}">${label} (${grouped[s].length})</div>
+${grouped[s].map((c) => `<div class="comment"><div class="text">${c.komentar}</div><div class="reason">${c.alasan || ""}</div></div>`).join("")}`;
+}).join("")}
+
+</body></html>`;
+
+    // Open in new tab for print/save as PDF
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    chrome.tabs.create({ url });
   }
 });
