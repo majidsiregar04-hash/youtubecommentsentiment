@@ -8,25 +8,25 @@ async function getApiKey() {
   return result.geminiApiKey || null;
 }
 
-async function analyzeSentiment(comments, apiKey) {
+async function analyzeSentiment(comments, apiKey, retryCount = 0) {
   const prompt = `Kamu adalah analis sentimen komentar YouTube. Analisis setiap komentar berikut dan berikan hasilnya dalam format JSON.
 
 Untuk setiap komentar, tentukan:
 - "sentiment": "positif", "negatif", atau "netral"
 - "score": angka dari -1.0 (sangat negatif) sampai 1.0 (sangat positif)
-- "alasan": penjelasan singkat dalam bahasa Indonesia (maks 15 kata)
+- "alasan": penjelasan singkat dalam bahasa Indonesia (maks 10 kata)
 
 Lalu berikan juga:
-- "ringkasan": ringkasan keseluruhan sentimen komentar dalam 2-3 kalimat bahasa Indonesia
+- "ringkasan": ringkasan keseluruhan sentimen dalam 1-2 kalimat bahasa Indonesia
 - "statistik": {"positif": jumlah, "negatif": jumlah, "netral": jumlah}
 
 Daftar komentar:
 ${comments.map((c, i) => `${i + 1}. "${c}"`).join("\n")}
 
-PENTING: Jawab HANYA dalam format JSON valid berikut, tanpa teks tambahan:
+Jawab HANYA dalam JSON valid:
 {
   "hasil": [
-    {"komentar": "teks komentar", "sentiment": "positif/negatif/netral", "score": 0.0, "alasan": "..."}
+    {"komentar": "teks", "sentiment": "positif/negatif/netral", "score": 0.0, "alasan": "..."}
   ],
   "ringkasan": "...",
   "statistik": {"positif": 0, "negatif": 0, "netral": 0}
@@ -39,7 +39,8 @@ PENTING: Jawab HANYA dalam format JSON valid berikut, tanpa teks tambahan:
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
+        responseMimeType: "application/json",
       },
     }),
   });
@@ -65,7 +66,22 @@ PENTING: Jawab HANYA dalam format JSON valid berikut, tanpa teks tambahan:
   // Clean control characters inside JSON string values that break JSON.parse
   jsonStr = jsonStr.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, " ");
 
-  return JSON.parse(jsonStr);
+  try {
+    return JSON.parse(jsonStr);
+  } catch (parseError) {
+    // Retry up to 2 times if JSON is truncated/invalid
+    if (retryCount < 2) {
+      console.warn(
+        `JSON parse gagal (percobaan ${retryCount + 1}), retry...`,
+        parseError.message
+      );
+      await new Promise((r) => setTimeout(r, 1000 * (retryCount + 1)));
+      return analyzeSentiment(comments, apiKey, retryCount + 1);
+    }
+    throw new Error(
+      `${jsonStr.substring(0, 80)}... is not valid JSON`
+    );
+  }
 }
 
 // Handle messages from popup
@@ -89,9 +105,21 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         const allResults = [];
         let totalStats = { positif: 0, negatif: 0, netral: 0 };
         let summaries = [];
+        const totalBatches = Math.ceil(comments.length / batchSize);
 
         for (let i = 0; i < comments.length; i += batchSize) {
+          const batchNum = Math.floor(i / batchSize) + 1;
           const batch = comments.slice(i, i + batchSize);
+
+          // Send progress update to popup
+          chrome.runtime.sendMessage({
+            action: "batchProgress",
+            current: batchNum,
+            total: totalBatches,
+            processed: Math.min(i + batchSize, comments.length),
+            totalComments: comments.length,
+          }).catch(() => {});
+
           const result = await analyzeSentiment(batch, apiKey);
 
           allResults.push(...result.hasil);
