@@ -104,7 +104,6 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         const comments = request.comments;
         const allResults = [];
         let totalStats = { positif: 0, negatif: 0, netral: 0 };
-        let summaries = [];
         const totalBatches = Math.ceil(comments.length / batchSize);
 
         for (let i = 0; i < comments.length; i += batchSize) {
@@ -126,14 +125,21 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
           totalStats.positif += result.statistik.positif;
           totalStats.negatif += result.statistik.negatif;
           totalStats.netral += result.statistik.netral;
-          summaries.push(result.ringkasan);
         }
+
+        // Generate concise summary from overall stats
+        const total = totalStats.positif + totalStats.negatif + totalStats.netral;
+        const dominan = totalStats.positif >= totalStats.negatif && totalStats.positif >= totalStats.netral
+          ? "positif" : totalStats.negatif >= totalStats.positif && totalStats.negatif >= totalStats.netral
+          ? "negatif" : "netral";
+        const pctDominan = total > 0 ? Math.round((totalStats[dominan] / total) * 100) : 0;
+        const ringkasan = `Dari ${total} komentar yang dianalisis, sentimen didominasi oleh komentar ${dominan} (${pctDominan}%) dengan ${totalStats.positif} positif, ${totalStats.netral} netral, dan ${totalStats.negatif} negatif.`;
 
         sendResponse({
           success: true,
           data: {
             hasil: allResults,
-            ringkasan: summaries.join(" "),
+            ringkasan: ringkasan,
             statistik: totalStats,
           },
         });

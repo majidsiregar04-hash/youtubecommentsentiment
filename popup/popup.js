@@ -170,29 +170,40 @@ document.addEventListener("DOMContentLoaded", () => {
     // Summary
     document.getElementById("summaryText").textContent = data.ringkasan;
 
-    // Comment list
+    // Comment list grouped by sentiment
     const commentList = document.getElementById("commentList");
     commentList.innerHTML = "";
 
+    const groups = [
+      { key: "positif", label: "😊 Positif", items: [] },
+      { key: "netral", label: "😐 Netral", items: [] },
+      { key: "negatif", label: "😞 Negatif", items: [] },
+    ];
+
     data.hasil.forEach((item) => {
-      const div = document.createElement("div");
-      div.className = `comment-item ${item.sentiment}`;
+      const group = groups.find((g) => g.key === item.sentiment);
+      if (group) group.items.push(item);
+    });
 
-      const emoji =
-        item.sentiment === "positif"
-          ? "😊"
-          : item.sentiment === "negatif"
-            ? "😞"
-            : "😐";
+    groups.forEach((group) => {
+      if (group.items.length === 0) return;
 
-      div.innerHTML = `
-        <div class="comment-text">${escapeHtml(item.komentar)}</div>
-        <div class="comment-meta">
-          <span class="sentiment-badge ${item.sentiment}">${emoji} ${item.sentiment}</span>
-          <span class="comment-reason">${escapeHtml(item.alasan || "")}</span>
-        </div>
-      `;
-      commentList.appendChild(div);
+      const header = document.createElement("h4");
+      header.className = `comment-group-header ${group.key}`;
+      header.textContent = `${group.label} (${group.items.length})`;
+      commentList.appendChild(header);
+
+      group.items.forEach((item) => {
+        const div = document.createElement("div");
+        div.className = `comment-item ${item.sentiment}`;
+        div.innerHTML = `
+          <div class="comment-text">${escapeHtml(item.komentar)}</div>
+          <div class="comment-meta">
+            <span class="comment-reason">${escapeHtml(item.alasan || "")}</span>
+          </div>
+        `;
+        commentList.appendChild(div);
+      });
     });
   }
 
